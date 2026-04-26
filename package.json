@@ -1,0 +1,73 @@
+{
+  "name": "potter-mcp",
+  "version": "1.0.0",
+  "description": "Open-source GTM research MCP server for Claude Code. LinkedIn, web, and browser automation primitives plus composite research tools. BYOK, no hosted tier.",
+  "license": "MIT",
+  "author": "Mihailo Skendzic",
+  "type": "module",
+  "bin": {
+    "potter-mcp": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    ".env.example"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest run --passWithNoTests",
+    "test:smoke": "POTTER_SMOKE=1 vitest run --passWithNoTests test/providers.smoke.test.ts",
+    "test:safety": "vitest run --passWithNoTests test/golden/safety.golden.test.ts",
+    "test:golden": "POTTER_GOLDEN=1 vitest run --passWithNoTests test/golden/composites.golden.test.ts",
+    "test:gate": "npm run test && npm run test:safety && npm run test:golden",
+    "typecheck:scripts": "tsc -p tsconfig.scripts.json",
+    "benchmark": "tsx scripts/benchmark-actors.ts",
+    "benchmark:dry": "tsx scripts/benchmark-actors.ts --dry-run",
+    "qa": "tsx scripts/qa-runner.ts",
+    "qa:single": "tsx scripts/qa-runner.ts --ids=1",
+    "qa:failures": "tsx scripts/qa-rerun-failures.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude-code",
+    "gtm",
+    "linkedin",
+    "research",
+    "enrichment",
+    "browser-automation",
+    "firecrawl",
+    "apify"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mihailo2501/potter-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Mihailo2501/potter-mcp/issues"
+  },
+  "homepage": "https://github.com/Mihailo2501/potter-mcp#readme",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "@browserbasehq/stagehand": "3.2.1",
+    "@mendable/firecrawl-js": "4.19.0",
+    "apify-client": "2.23.0",
+    "zod": "4.3.6",
+    "dotenv": "17.4.2",
+    "p-limit": "7.3.0"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "@types/node": "20.19.39",
+    "tsx": "4.21.0",
+    "vitest": "4.1.5"
+  }
+}
