@@ -193,7 +193,6 @@ class StagehandManager {
     const session = this.sessions.get(id);
     if (!session) return;
     clearTimeout(session.timeoutTimer);
-    this.sessions.delete(id);
     try {
       await session.stagehand.close();
       this.log("info", "stagehand_session_closed", { id, env: session.env });
@@ -202,6 +201,8 @@ class StagehandManager {
         id,
         error: err instanceof Error ? err.message : String(err),
       });
+    } finally {
+      this.sessions.delete(id);
     }
   }
 
@@ -224,6 +225,11 @@ class StagehandManager {
   async closeAllSessions(): Promise<void> {
     const ids = [...this.sessions.keys()];
     await Promise.all(ids.map((id) => this.closeSession(id)));
+  }
+
+  async closeAllSessionsSafely(maxWaitMs = 3_000): Promise<void> {
+    const ids = [...this.sessions.keys()];
+    await Promise.all(ids.map((id) => this.closeSessionSafely(id, maxWaitMs)));
   }
 
   listSessions(): Array<Omit<StagehandSession, "stagehand">> {
@@ -274,7 +280,7 @@ export const getStagehand = (): StagehandManager => {
   return instance;
 };
 
-export const closeAllStagehandSessions = async (): Promise<void> => {
+export const closeAllStagehandSessions = async (waitMs = 3_000): Promise<void> => {
   if (instance === null) return;
-  await instance.closeAllSessions();
+  await instance.closeAllSessionsSafely(waitMs);
 };

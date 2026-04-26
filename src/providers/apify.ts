@@ -88,7 +88,10 @@ class ApifyProvider {
   private async withRetries<T>(
     tool: string,
     op: () => Promise<T>,
-    isRetryable: (err: unknown) => boolean = (err) => retryableStatus(extractStatus(err)),
+    isRetryable: (err: unknown) => boolean = (err) => {
+      if (err instanceof PotterError) return err.retryable;
+      return retryableStatus(extractStatus(err));
+    },
   ): Promise<T> {
     const cfg = loadConfig();
     const maxAttempts = cfg.maxRetries + 1;

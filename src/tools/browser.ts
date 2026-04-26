@@ -87,7 +87,13 @@ const ClickArgs = z
     selector_or_description: z
       .string()
       .describe(
-        "Either a CSS selector or a natural-language description. Natural language routes through Stagehand's act(); requires a Browserbase session or a configured Anthropic/OpenAI key.",
+        "Either a CSS selector (e.g. '#submit', '.btn-primary', '[data-test=cta]') or a natural-language description (e.g. 'the Submit button'). Inputs starting with '#', '.', or '[' route deterministically through Playwright; everything else routes through Stagehand's LLM act() and needs a Browserbase session or a configured POTTER_ANTHROPIC_API_KEY / POTTER_OPENAI_API_KEY.",
+      ),
+    mode: z
+      .enum(["selector", "description", "auto"])
+      .optional()
+      .describe(
+        "Force a routing mode. 'auto' (default) picks 'selector' when the input starts with '#', '.', or '['; otherwise 'description'.",
       ),
   })
   .strict();
@@ -101,6 +107,12 @@ const FillArgs = z
       .boolean()
       .optional()
       .describe("Press Enter after typing. Defaults to false."),
+    mode: z
+      .enum(["selector", "description", "auto"])
+      .optional()
+      .describe(
+        "Force a routing mode. 'auto' (default) picks 'selector' when the input starts with '#', '.', or '['; otherwise 'description'.",
+      ),
   })
   .strict();
 
@@ -188,19 +200,36 @@ const ActArgs = z
   .object({
     session_id: z.string(),
     goal: z.string().describe("Natural-language goal, e.g. 'click the Learn More link'."),
-    max_steps: z.number().int().min(1).max(20).optional().describe("Maximum action steps. Defaults to 10."),
-    allow_providers: z
-      .array(z.enum(["browserbase", "anthropic", "openai"]))
-      .optional()
-      .describe(
-        "Priority list of LLM providers to attempt. Default order is Browserbase → Anthropic → OpenAI.",
-      ),
   })
   .strict();
 
-const requireUrlAllowed = (url: string): void => {
+const requireUrlAllowed = async (url: string): Promise<void> => {
   const cfg = loadConfig();
-  ensureUrlAllowed(url, cfg.allowPrivateUrls);
+  await ensureUrlAllowed(url, cfg.allowPrivateUrls);
+};
+
+const looksLikeCssSelector = (s: string): boolean => /^[#.\[]/.test(s.trim());
+
+const resolveBrowserMode = (
+  mode: "selector" | "description" | "auto" | undefined,
+  input: string,
+): "selector" | "description" => {
+  if (mode === "selector" || mode === "description") return mode;
+  return looksLikeCssSelector(input) ? "selector" : "description";
+};
+
+const requireActivePage = (session: StagehandSession, tool: string) => {
+  const page = session.stagehand.context.activePage();
+  if (!page) {
+    throw new PotterError({
+      tool,
+      provider: "stagehand",
+      reason: "No active page.",
+      retryable: true,
+      recommended_action: "Reopen the session with potter_browser_open.",
+    });
+  }
+  return page;
 };
 
 export const browserTools: ToolDefinition[] = [
@@ -211,7 +240,7 @@ export const browserTools: ToolDefinition[] = [
     argsSchema: OpenArgs,
     run: async ({ url, stealth, viewport, user_agent, force_local }) => {
       rejectIfLinkedInUrl("potter_browser_open", url);
-      requireUrlAllowed(url);
+      await requireUrlAllowed(url);
       const manager = getStagehand();
       const options: Parameters<typeof manager.createSession>[0] = {};
       if (stealth !== undefined) options.stealth = stealth;
@@ -245,32 +274,66 @@ export const browserTools: ToolDefinition[] = [
   defineTool({
     name: "potter_browser_click",
     description:
-      `Click an element in a browser session. Accepts a CSS selector or a natural-language description. Descriptions use Stagehand's LLM-backed act(); on Browserbase this is included, on LOCAL mode you need POTTER_ANTHROPIC_API_KEY or POTTER_OPENAI_API_KEY.${NO_LINKEDIN_NOTE}`,
+      `Click an element in a browser session. Accepts a CSS selector (deterministic via Playwright) or a natural-language description (routed through Stagehand's LLM act()). Selector inputs start with '#', '.', or '[' and run with no LLM; descriptions need a Browserbase session or POTTER_ANTHROPIC_API_KEY / POTTER_OPENAI_API_KEY.${NO_LINKEDIN_NOTE}`,
     argsSchema: ClickArgs,
-    run: async ({ session_id, selector_or_description }) => {
+    run: async ({ session_id, selector_or_description, mode }) => {
       const manager = getStagehand();
       return manager.withLease(session_id, "potter_browser_click", async (session) => {
         rejectIfLinkedInPage("potter_browser_click", session);
-        const instruction = `click ${selector_or_description}`;
-        const result = await session.stagehand.act(instruction);
-        return envelopeFor(session, { session_id, action: "click", result });
+        const resolved = resolveBrowserMode(mode, selector_or_description);
+        if (resolved === "selector") {
+          const page = requireActivePage(session, "potter_browser_click");
+          await page.locator(selector_or_description).click();
+          return envelopeFor(session, {
+            session_id,
+            action: "click",
+            mode: "selector",
+            selector: selector_or_description,
+          });
+        }
+        const result = await session.stagehand.act(`click ${selector_or_description}`);
+        return envelopeFor(session, {
+          session_id,
+          action: "click",
+          mode: "description",
+          result,
+        });
       });
     },
   }),
   defineTool({
     name: "potter_browser_fill",
     description:
-      `Type a value into a form field. Accepts a CSS selector or description. Optional submit=true presses Enter after typing. LLM-backed for natural-language inputs, same provider rules as potter_browser_click.${NO_LINKEDIN_NOTE}`,
+      `Type a value into a form field. Accepts a CSS selector (deterministic via Playwright) or a natural-language description (LLM-routed via Stagehand). Selectors run with no LLM; descriptions follow the same provider rules as potter_browser_click. Optional submit=true presses Enter after typing.${NO_LINKEDIN_NOTE}`,
     argsSchema: FillArgs,
-    run: async ({ session_id, selector_or_description, value, submit }) => {
+    run: async ({ session_id, selector_or_description, value, submit, mode }) => {
       const manager = getStagehand();
       return manager.withLease(session_id, "potter_browser_fill", async (session) => {
         rejectIfLinkedInPage("potter_browser_fill", session);
+        const resolved = resolveBrowserMode(mode, selector_or_description);
+        if (resolved === "selector") {
+          const page = requireActivePage(session, "potter_browser_fill");
+          await page.locator(selector_or_description).fill(value);
+          if (submit) await page.keyPress("Enter");
+          return envelopeFor(session, {
+            session_id,
+            action: "fill",
+            mode: "selector",
+            selector: selector_or_description,
+            submit: submit ?? false,
+          });
+        }
         const instruction = submit
           ? `type ${JSON.stringify(value)} into ${selector_or_description} and press Enter`
           : `type ${JSON.stringify(value)} into ${selector_or_description}`;
         const result = await session.stagehand.act(instruction);
-        return envelopeFor(session, { session_id, action: "fill", submit: submit ?? false, result });
+        return envelopeFor(session, {
+          session_id,
+          action: "fill",
+          mode: "description",
+          submit: submit ?? false,
+          result,
+        });
       });
     },
   }),
@@ -458,15 +521,17 @@ export const browserTools: ToolDefinition[] = [
     description:
       `EXPERIMENTAL: Accomplish a natural-language goal in a browser session via Stagehand's LLM-driven agent. Example goal: 'Click the Learn More link under the pricing section.' On Browserbase sessions, uses the bundled LLM. On LOCAL sessions, requires a configured Anthropic or OpenAI key.${NO_LINKEDIN_NOTE}`,
     argsSchema: ActArgs,
-    run: async ({ session_id, goal, max_steps }) => {
+    run: async ({ session_id, goal }) => {
       const cfg = loadConfig();
       if (!cfg.enableExperimentalBrowserAct) {
         throw new PotterError({
           tool: "potter_browser_act",
           provider: "stagehand",
-          reason: "potter_browser_act is disabled. Set POTTER_ENABLE_EXPERIMENTAL_BROWSER_ACT=true to opt in.",
+          reason:
+            "potter_browser_act is currently disabled. The experimental flag defaults to enabled; remove POTTER_ENABLE_EXPERIMENTAL_BROWSER_ACT or set it to true to use this tool.",
           retryable: false,
-          recommended_action: "Set POTTER_ENABLE_EXPERIMENTAL_BROWSER_ACT=true in .env and restart Potter.",
+          recommended_action:
+            "Unset POTTER_ENABLE_EXPERIMENTAL_BROWSER_ACT in your environment, or set it to true, and restart Potter.",
         });
       }
       const manager = getStagehand();
@@ -478,8 +543,6 @@ export const browserTools: ToolDefinition[] = [
         return envelopeFor(session, {
           session_id,
           goal_accepted: true,
-          max_steps_requested: max_steps,
-          note: "Phase 2 does not enforce max_steps or allow_providers; Stagehand's internal policy is used.",
           result,
         });
       });

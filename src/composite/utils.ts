@@ -318,14 +318,29 @@ export const outcomeFromSettled = (
   settled: PromiseSettledResult<unknown>,
 ): SubCallOutcome => {
   if (isSettledOk(settled)) {
-    const v = settled.value as { error?: SubCallOutcome["error"] } | unknown;
-    if (v && typeof v === "object" && "error" in (v as object) && (v as { error?: unknown }).error) {
-      return {
-        key,
-        provider,
-        ok: false,
-        error: (v as { error: SubCallOutcome["error"] }).error,
-      };
+    const v = settled.value;
+    // Defensive: a task that returns a Result-shape {ok:false, error} or just an error-like
+    // payload should be treated as a failed outcome, not a success. Without this, the composite
+    // envelope inflates data_quality.confidence because the sub-call looks like it succeeded.
+    if (v && typeof v === "object") {
+      const obj = v as { ok?: unknown; error?: SubCallOutcome["error"] };
+      const isExplicitFailure = obj.ok === false;
+      const hasError = Boolean(obj.error);
+      if (isExplicitFailure || hasError) {
+        return {
+          key,
+          provider,
+          ok: false,
+          error:
+            obj.error ?? {
+              tool: key,
+              provider,
+              reason: "Sub-call returned ok=false without an error payload.",
+              retryable: false,
+              recommended_action: "Inspect the sub-call output for failure context.",
+            },
+        };
+      }
     }
     return { key, provider, ok: true, value: settled.value };
   }

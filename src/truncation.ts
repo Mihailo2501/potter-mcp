@@ -2,6 +2,24 @@ const TRUNCATION_MARKER = "[…truncated by Potter]";
 
 const byteLength = (s: string): number => Buffer.byteLength(s, "utf8");
 
+// JSON.stringify throws on circular refs and on BigInt values, which would convert
+// a successful tool result into a runtime error. safeStringify swaps both for inert markers
+// so truncation logic always sees a serializable string.
+const safeStringify = (data: unknown): string => {
+  const seen = new WeakSet<object>();
+  const out = JSON.stringify(data, (_key, value) => {
+    if (typeof value === "bigint") return value.toString();
+    if (typeof value === "object" && value !== null) {
+      if (seen.has(value)) return "[Circular]";
+      seen.add(value);
+    }
+    return value;
+  });
+  return out ?? "null";
+};
+
+const sizeOf = (data: unknown): number => byteLength(safeStringify(data));
+
 export interface TruncationResult<T> {
   data: T;
   truncated: boolean;
@@ -30,7 +48,7 @@ const truncateArray = <T>(value: T[], maxBytes: number): T[] => {
   while (lo < hi) {
     const mid = Math.floor((lo + hi + 1) / 2);
     const slice = value.slice(0, mid);
-    if (byteLength(JSON.stringify(slice)) <= maxBytes) lo = mid;
+    if (sizeOf(slice) <= maxBytes) lo = mid;
     else hi = mid - 1;
   }
   return value.slice(0, lo);
@@ -40,8 +58,8 @@ export const truncateJson = (
   data: unknown,
   maxBytes: number,
 ): TruncationResult<unknown> => {
-  const serialized = JSON.stringify(data);
-  const originalBytes = byteLength(serialized ?? "null");
+  const serialized = safeStringify(data);
+  const originalBytes = byteLength(serialized);
   if (originalBytes <= maxBytes) {
     return {
       data,
@@ -59,14 +77,14 @@ export const truncateJson = (
       data: truncated,
       truncated: true,
       original_bytes: originalBytes,
-      final_bytes: byteLength(JSON.stringify(truncated)),
+      final_bytes: sizeOf(truncated),
       notes: [`string_truncated_from_${originalBytes}_bytes`],
     };
   }
 
   if (Array.isArray(data)) {
     const truncated = truncateArray(data, maxBytes);
-    const finalBytes = byteLength(JSON.stringify(truncated));
+    const finalBytes = sizeOf(truncated);
     return {
       data: truncated,
       truncated: true,
@@ -80,14 +98,14 @@ export const truncateJson = (
     const trimmed: Record<string, unknown> = { ...(data as Record<string, unknown>) };
     const notes: string[] = [];
     let guard = 0;
-    while (byteLength(JSON.stringify(trimmed)) > maxBytes && guard < 64) {
+    while (sizeOf(trimmed) > maxBytes && guard < 64) {
       guard += 1;
-      const currentBytes = byteLength(JSON.stringify(trimmed));
+      const currentBytes = sizeOf(trimmed);
       const overshoot = currentBytes - maxBytes;
       let largestKey: string | null = null;
       let largestSize = 0;
       for (const [k, v] of Object.entries(trimmed)) {
-        const size = byteLength(JSON.stringify(v) ?? "null");
+        const size = sizeOf(v);
         if (size > largestSize) {
           largestSize = size;
           largestKey = k;
@@ -116,21 +134,21 @@ export const truncateJson = (
         delete trimmed[largestKey];
       }
     }
-    if (byteLength(JSON.stringify(trimmed)) > maxBytes) {
+    if (sizeOf(trimmed) > maxBytes) {
       const sortedKeys = Object.entries(trimmed)
-        .map<[string, number]>(([k, v]) => [k, byteLength(JSON.stringify(v) ?? "null")])
+        .map<[string, number]>(([k, v]) => [k, sizeOf(v)])
         .sort((a, b) => b[1] - a[1])
         .map(([k]) => k);
       for (const key of sortedKeys) {
-        if (byteLength(JSON.stringify(trimmed)) <= maxBytes) break;
+        if (sizeOf(trimmed) <= maxBytes) break;
         delete trimmed[key];
         notes.push(`field_${key}_dropped`);
       }
     }
-    let finalBytes = byteLength(JSON.stringify(trimmed));
+    let finalBytes = sizeOf(trimmed);
     if (finalBytes > maxBytes) {
       const marker = { _truncated: true, _note: "response_exceeded_cap" };
-      const markerBytes = byteLength(JSON.stringify(marker));
+      const markerBytes = sizeOf(marker);
       if (markerBytes <= maxBytes) {
         return {
           data: marker,
@@ -159,5 +177,4 @@ export const truncateJson = (
   };
 };
 
-export const byteSize = (data: unknown): number =>
-  byteLength(JSON.stringify(data) ?? "null");
+export const byteSize = (data: unknown): number => sizeOf(data);

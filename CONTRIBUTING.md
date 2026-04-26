@@ -21,7 +21,7 @@ npm run dev
 # Tests
 npm test               # unit + structural, no API cost
 npm run test:safety    # safety guards, no API cost
-npm run test:gate      # full gate, includes live composites (~$1-2 in Apify+Firecrawl)
+npm run test:gate      # full gate, includes live composites (~$1-2 in Apify + Firecrawl per run; ~6 actor runs + ~10 Firecrawl calls)
 ```
 
 You need a `.env` with at minimum `POTTER_APIFY_TOKEN` and `POTTER_FIRECRAWL_API_KEY` for the live tests. See `.env.example` for the full list.

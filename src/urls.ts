@@ -1,4 +1,5 @@
 import { isIP } from "node:net";
+import { lookup } from "node:dns/promises";
 
 const PRIVATE_IPV4_RANGES: Array<[number[], number[]]> = [
   [[10, 0, 0, 0], [10, 255, 255, 255]],
@@ -63,7 +64,10 @@ const unwrapIPv4FromIPv6 = (ipv6: string): string | null => {
   return null;
 };
 
-export const ensureUrlAllowed = (input: string, allowPrivate: boolean): URL => {
+// Note: this guard validates the user-provided URL only. It does not follow HTTP redirects;
+// downstream fetchers (Firecrawl, Stagehand/Browserbase, Chromium) handle their own redirect
+// chains. For redirect-revalidation guarantees, Potter relies on those providers' SSRF protections.
+export const ensureUrlAllowed = async (input: string, allowPrivate: boolean): Promise<URL> => {
   let parsed: URL;
   try {
     parsed = new URL(input);
@@ -110,6 +114,34 @@ export const ensureUrlAllowed = (input: string, allowPrivate: boolean): URL => {
     }
   }
 
+  // Catch DNS-rebinding-style bypasses (e.g. 127.0.0.1.sslip.io, attacker.example.com → 10.x.x.x)
+  // by resolving the hostname and checking the IP family. Only runs for non-literal hosts.
+  if (family === 0) {
+    try {
+      const resolved = await lookup(stripped);
+      const addr = resolved.address;
+      if (resolved.family === 4 && isPrivateIPv4(addr)) {
+        throw new Error(`Blocked: ${hostname} resolves to private IPv4 ${addr}`);
+      }
+      if (resolved.family === 6) {
+        const mapped6 = unwrapIPv4FromIPv6(addr);
+        if (mapped6 && isIP(mapped6) === 4 && isPrivateIPv4(mapped6)) {
+          throw new Error(`Blocked: ${hostname} resolves to IPv4-mapped IPv6 ${addr}`);
+        }
+        if (isPrivateIPv6(addr)) {
+          throw new Error(`Blocked: ${hostname} resolves to private IPv6 ${addr}`);
+        }
+      }
+      if (METADATA_HOSTS.has(addr)) {
+        throw new Error(`Blocked: ${hostname} resolves to metadata host ${addr}`);
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith("Blocked:")) throw err;
+      // DNS lookup failures (NXDOMAIN, network unreachable, etc.) pass through;
+      // the downstream fetch will surface a clearer provider-side error.
+    }
+  }
+
   return parsed;
 };
 
@@ -120,11 +152,28 @@ const LINKEDIN_ACCEPTED_HOSTS = new Set([
   "touch.linkedin.com",
 ]);
 
+// LinkedIn serves regional content under <country-code>.linkedin.com. Closed allowlist
+// of subdomains LinkedIn actually serves; arbitrary subdomains like foo.linkedin.com stay rejected.
+const LINKEDIN_REGIONAL_SUBDOMAINS = new Set([
+  "uk", "de", "fr", "es", "it", "nl", "br", "mx", "ca", "au",
+  "in", "jp", "kr", "pl", "pt", "se", "dk", "no", "fi", "be",
+  "ch", "at", "ie", "za", "sg", "hk", "tw", "ru", "ar", "cl",
+  "co", "pe", "tr", "ae", "sa", "il", "id", "th", "ph", "vn",
+]);
+
+const REGIONAL_LINKEDIN_HOST_RE = /^([a-z]{2,3})\.linkedin\.com$/;
+
+const isAcceptedLinkedInHost = (host: string): boolean => {
+  if (LINKEDIN_ACCEPTED_HOSTS.has(host)) return true;
+  const m = host.match(REGIONAL_LINKEDIN_HOST_RE);
+  return Boolean(m && m[1] && LINKEDIN_REGIONAL_SUBDOMAINS.has(m[1]));
+};
+
 export const isLinkedInUrl = (input: string): boolean => {
   try {
     const url = new URL(input);
     const host = url.hostname.toLowerCase().replace(/\.$/, "");
-    return LINKEDIN_ACCEPTED_HOSTS.has(host);
+    return isAcceptedLinkedInHost(host);
   } catch {
     return false;
   }
@@ -133,7 +182,7 @@ export const isLinkedInUrl = (input: string): boolean => {
 export const isLinkedInDomain = (input: string): boolean => {
   try {
     const domain = canonicalizeDomain(input);
-    return LINKEDIN_ACCEPTED_HOSTS.has(domain) || domain === "lnkd.in";
+    return isAcceptedLinkedInHost(domain) || domain === "lnkd.in";
   } catch {
     return false;
   }
@@ -142,7 +191,7 @@ export const isLinkedInDomain = (input: string): boolean => {
 const normalizeLinkedInHost = (input: string): string => {
   const url = new URL(input);
   const rawHost = url.hostname.toLowerCase().replace(/\.$/, "");
-  if (!LINKEDIN_ACCEPTED_HOSTS.has(rawHost)) {
+  if (!isAcceptedLinkedInHost(rawHost)) {
     throw new Error(`Not a LinkedIn URL: ${input}`);
   }
   return "www.linkedin.com";
@@ -189,10 +238,11 @@ export const canonicalizeLinkedInCompanyUrl = (input: string): string => {
   const url = new URL(input);
   const host = normalizeLinkedInHost(input);
   const path = stripKnownLocale(url.pathname);
-  const match = path.match(/^\/(?:company|school|showcase)\/([^/?#]+)/i);
-  const slug = match?.[1];
-  if (!slug) throw new Error(`Not a LinkedIn company URL: ${input}`);
-  return `https://${host}/company/${slug.toLowerCase()}/`;
+  const match = path.match(/^\/(company|school|showcase)\/([^/?#]+)/i);
+  const pathType = match?.[1]?.toLowerCase();
+  const slug = match?.[2];
+  if (!pathType || !slug) throw new Error(`Not a LinkedIn company URL: ${input}`);
+  return `https://${host}/${pathType}/${slug.toLowerCase()}/`;
 };
 
 export const canonicalizeDomain = (input: string): string => {
@@ -231,8 +281,8 @@ export const slugFromLinkedInCompanyUrl = (input: string): string => {
   return m?.[1] ?? "";
 };
 
-export const canonicalizeWebUrl = (input: string, allowPrivate: boolean): string => {
-  const parsed = ensureUrlAllowed(input, allowPrivate);
+export const canonicalizeWebUrl = async (input: string, allowPrivate: boolean): Promise<string> => {
+  const parsed = await ensureUrlAllowed(input, allowPrivate);
   const stripped = stripTrackingParams(parsed);
   stripped.hostname = stripped.hostname.toLowerCase();
   return stripped.toString();

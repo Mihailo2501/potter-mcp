@@ -86,6 +86,43 @@ describe("potter_web_scrape description nudges format='html' for stack-fingerpri
   });
 });
 
+describe("registry invariants", () => {
+  it("all launch tool names are unique", () => {
+    const names = launchTools.map((t) => t.name);
+    const dupes = names.filter((n, i) => names.indexOf(n) !== i);
+    expect(dupes).toEqual([]);
+  });
+
+  it("every launch tool name uses the potter_ prefix", () => {
+    const offenders = launchTools.map((t) => t.name).filter((n) => !n.startsWith("potter_"));
+    expect(offenders).toEqual([]);
+  });
+
+  it("every launch tool inputSchema declares additionalProperties: false at the top level", () => {
+    const offenders = launchTools
+      .filter((t) => (t.inputSchema as { additionalProperties?: unknown }).additionalProperties !== false)
+      .map((t) => t.name);
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe("browser deterministic vs LLM-routed surface", () => {
+  it("potter_browser_click description signals both selector (deterministic) and description (LLM) modes", () => {
+    const click = browserTools.find((t) => t.name === "potter_browser_click");
+    expect(click).toBeDefined();
+    expect(click!.description).toMatch(/selector/i);
+    expect(click!.description).toMatch(/(deterministic|playwright)/i);
+    expect(click!.description).toMatch(/(act\(\)|natural-language|description)/i);
+  });
+
+  it("potter_browser_fill description signals both selector and description modes", () => {
+    const fill = browserTools.find((t) => t.name === "potter_browser_fill");
+    expect(fill).toBeDefined();
+    expect(fill!.description).toMatch(/selector/i);
+    expect(fill!.description).toMatch(/(deterministic|playwright)/i);
+  });
+});
+
 describe("docs-to-registry count parity", () => {
   const totalCount = launchTools.length;
   const browserCount = browserTools.length;

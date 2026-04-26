@@ -89,11 +89,11 @@ describe("canonicalizeLinkedInCompanyUrl", () => {
       canonicalizeLinkedInCompanyUrl("https://www.linkedin.com/company/trustvanta/about/"),
     ).toBe("https://www.linkedin.com/company/trustvanta/");
   });
-  it("normalizes school and showcase paths to company", () => {
+  it("preserves school and showcase path types instead of rewriting to /company/", () => {
     expect(canonicalizeLinkedInCompanyUrl("https://www.linkedin.com/school/harvard-university/"))
-      .toBe("https://www.linkedin.com/company/harvard-university/");
+      .toBe("https://www.linkedin.com/school/harvard-university/");
     expect(canonicalizeLinkedInCompanyUrl("https://www.linkedin.com/showcase/aws-cloud/"))
-      .toBe("https://www.linkedin.com/company/aws-cloud/");
+      .toBe("https://www.linkedin.com/showcase/aws-cloud/");
   });
 });
 
@@ -110,8 +110,8 @@ describe("canonicalizeDomain", () => {
 });
 
 describe("ensureUrlAllowed", () => {
-  it("allows public URLs", () => {
-    expect(() => ensureUrlAllowed("https://anthropic.com", false)).not.toThrow();
+  it("allows public URLs", async () => {
+    await expect(ensureUrlAllowed("https://anthropic.com", false)).resolves.toBeInstanceOf(URL);
   });
   it.each([
     "http://localhost:8080",
@@ -122,42 +122,47 @@ describe("ensureUrlAllowed", () => {
     "http://169.254.169.254/",
     "http://metadata.google.internal/",
     "http://myserver.local/",
-  ])("blocks private target %s", (url) => {
-    expect(() => ensureUrlAllowed(url, false)).toThrow();
+  ])("blocks private target %s", async (url) => {
+    await expect(ensureUrlAllowed(url, false)).rejects.toThrow();
   });
-  it("blocks link-local IPv6", () => {
-    expect(() => ensureUrlAllowed("http://[fe80::1]/", false)).toThrow();
+  it("blocks link-local IPv6", async () => {
+    await expect(ensureUrlAllowed("http://[fe80::1]/", false)).rejects.toThrow();
   });
-  it("blocks IPv4-mapped IPv6 loopback", () => {
-    expect(() => ensureUrlAllowed("http://[::ffff:127.0.0.1]/", false)).toThrow();
+  it("blocks IPv4-mapped IPv6 loopback", async () => {
+    await expect(ensureUrlAllowed("http://[::ffff:127.0.0.1]/", false)).rejects.toThrow();
   });
-  it("blocks trailing-dot localhost", () => {
-    expect(() => ensureUrlAllowed("http://localhost./", false)).toThrow();
+  it("blocks trailing-dot localhost", async () => {
+    await expect(ensureUrlAllowed("http://localhost./", false)).rejects.toThrow();
   });
-  it("allows private URLs when flag set", () => {
-    expect(() => ensureUrlAllowed("http://localhost:8080", true)).not.toThrow();
+  it("allows private URLs when flag set", async () => {
+    await expect(ensureUrlAllowed("http://localhost:8080", true)).resolves.toBeInstanceOf(URL);
   });
-  it("rejects unsupported protocol", () => {
-    expect(() => ensureUrlAllowed("file:///etc/passwd", false)).toThrow(/protocol/i);
+  it("rejects unsupported protocol", async () => {
+    await expect(ensureUrlAllowed("file:///etc/passwd", false)).rejects.toThrow(/protocol/i);
+  });
+  it("blocks DNS-rebinding-style hosts that resolve to loopback (sslip.io)", async () => {
+    await expect(ensureUrlAllowed("https://127.0.0.1.sslip.io/", false)).rejects.toThrow(
+      /resolves to private/,
+    );
   });
 });
 
 describe("canonicalizeWebUrl", () => {
-  it("strips utm params", () => {
-    expect(
+  it("strips utm params", async () => {
+    await expect(
       canonicalizeWebUrl(
         "https://anthropic.com/pricing?utm_source=x&utm_medium=y&foo=keep",
         false,
       ),
-    ).toBe("https://anthropic.com/pricing?foo=keep");
+    ).resolves.toBe("https://anthropic.com/pricing?foo=keep");
   });
-  it("strips fbclid", () => {
-    expect(canonicalizeWebUrl("https://anthropic.com?fbclid=abc123", false)).toBe(
+  it("strips fbclid", async () => {
+    await expect(canonicalizeWebUrl("https://anthropic.com?fbclid=abc123", false)).resolves.toBe(
       "https://anthropic.com/",
     );
   });
-  it("lowercases the host", () => {
-    expect(canonicalizeWebUrl("HTTPS://ANTHROPIC.COM/Path", false)).toBe(
+  it("lowercases the host", async () => {
+    await expect(canonicalizeWebUrl("HTTPS://ANTHROPIC.COM/Path", false)).resolves.toBe(
       "https://anthropic.com/Path",
     );
   });

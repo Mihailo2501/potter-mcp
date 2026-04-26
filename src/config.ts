@@ -9,10 +9,14 @@ loadDotenv({ path: path.join(packageRoot, ".env"), quiet: true });
 
 const LogLevelSchema = z.enum(["debug", "info", "warn", "error"]);
 
-const numberFromEnv = (raw: string | undefined, fallback: number): number => {
+const numberFromEnv = (raw: string | undefined, fallback: number, name?: string): number => {
   if (raw === undefined || raw === "") return fallback;
   const parsed = Number(raw);
-  return Number.isFinite(parsed) ? parsed : fallback;
+  if (Number.isFinite(parsed)) return parsed;
+  process.stderr.write(
+    `[potter] WARN: ${name ?? "numeric env var"} = ${JSON.stringify(raw)} is not a finite number; falling back to ${fallback}.\n`,
+  );
+  return fallback;
 };
 
 const boolFromEnv = (raw: string | undefined, fallback: boolean): boolean => {
@@ -76,14 +80,14 @@ export const loadConfig = (): PotterConfig => {
     anthropicApiKey: optionalString(process.env.POTTER_ANTHROPIC_API_KEY),
     openaiApiKey: optionalString(process.env.POTTER_OPENAI_API_KEY),
 
-    maxResponseBytes: numberFromEnv(process.env.POTTER_MAX_RESPONSE_BYTES, 20000),
+    maxResponseBytes: numberFromEnv(process.env.POTTER_MAX_RESPONSE_BYTES, 20000, "POTTER_MAX_RESPONSE_BYTES"),
     logLevel: logLevelFromEnv(process.env.POTTER_LOG_LEVEL),
-    providerTimeoutMs: numberFromEnv(process.env.POTTER_PROVIDER_TIMEOUT_MS, 60000),
-    maxRetries: numberFromEnv(process.env.POTTER_MAX_RETRIES, 3),
-    concurrencyLimit: numberFromEnv(process.env.POTTER_CONCURRENCY_LIMIT, 5),
-    browserSessionTimeoutMinutes: numberFromEnv(process.env.POTTER_BROWSER_SESSION_TIMEOUT_MINUTES, 10),
-    browserActMaxSteps: numberFromEnv(process.env.POTTER_BROWSER_ACT_MAX_STEPS, 10),
-    browserActTimeoutSeconds: numberFromEnv(process.env.POTTER_BROWSER_ACT_TIMEOUT_SECONDS, 120),
+    providerTimeoutMs: numberFromEnv(process.env.POTTER_PROVIDER_TIMEOUT_MS, 60000, "POTTER_PROVIDER_TIMEOUT_MS"),
+    maxRetries: numberFromEnv(process.env.POTTER_MAX_RETRIES, 3, "POTTER_MAX_RETRIES"),
+    concurrencyLimit: numberFromEnv(process.env.POTTER_CONCURRENCY_LIMIT, 5, "POTTER_CONCURRENCY_LIMIT"),
+    browserSessionTimeoutMinutes: numberFromEnv(process.env.POTTER_BROWSER_SESSION_TIMEOUT_MINUTES, 10, "POTTER_BROWSER_SESSION_TIMEOUT_MINUTES"),
+    browserActMaxSteps: numberFromEnv(process.env.POTTER_BROWSER_ACT_MAX_STEPS, 10, "POTTER_BROWSER_ACT_MAX_STEPS"),
+    browserActTimeoutSeconds: numberFromEnv(process.env.POTTER_BROWSER_ACT_TIMEOUT_SECONDS, 120, "POTTER_BROWSER_ACT_TIMEOUT_SECONDS"),
 
     apifyLinkedinProfileActor: optionalString(process.env.POTTER_APIFY_LINKEDIN_PROFILE_ACTOR),
     apifyLinkedinCompanyActor: optionalString(process.env.POTTER_APIFY_LINKEDIN_COMPANY_ACTOR),
@@ -100,5 +104,15 @@ export const loadConfig = (): PotterConfig => {
     enablePing: boolFromEnv(process.env.POTTER_ENABLE_PING, false),
     qaStubMode: boolFromEnv(process.env.POTTER_QA_STUB_MODE, false),
   });
+
+  // Bridge Potter's POTTER_*_API_KEY config to the bare env vars Stagehand and other
+  // downstream libraries read directly. Only set when the bare var isn't already populated.
+  if (cached.openaiApiKey && !process.env.OPENAI_API_KEY) {
+    process.env.OPENAI_API_KEY = cached.openaiApiKey;
+  }
+  if (cached.anthropicApiKey && !process.env.ANTHROPIC_API_KEY) {
+    process.env.ANTHROPIC_API_KEY = cached.anthropicApiKey;
+  }
+
   return cached;
 };

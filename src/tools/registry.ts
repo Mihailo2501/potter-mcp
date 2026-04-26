@@ -2,8 +2,12 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { ZodType } from "zod";
 import { z } from "zod";
 import { PotterError, errorToContent } from "../errors.js";
-import { truncateJson } from "../truncation.js";
+import { byteSize, truncateJson } from "../truncation.js";
 import { loadConfig } from "../config.js";
+
+// _truncation envelope wrapper costs ~150-200 bytes; reserve headroom so adding it
+// after a max-budget truncation doesn't push the final payload over cap.
+const TRUNCATION_ENVELOPE_HEADROOM = 250;
 
 export interface ToolDefinition {
   name: string;
@@ -33,15 +37,32 @@ const sanitizeJsonSchema = (schema: unknown): Record<string, unknown> => {
 
 export const toolSuccess = (payload: unknown): CallToolResult => {
   const cfg = loadConfig();
-  const wrapped = truncateJson(payload, cfg.maxResponseBytes);
+  let wrapped = truncateJson(payload, cfg.maxResponseBytes);
+  if (wrapped.truncated) {
+    const reservedBudget = Math.max(cfg.maxResponseBytes - TRUNCATION_ENVELOPE_HEADROOM, 256);
+    if (wrapped.final_bytes > reservedBudget) {
+      wrapped = truncateJson(payload, reservedBudget);
+    }
+  }
   const envelope = wrapped.truncated
     ? { ...((wrapped.data ?? {}) as object), _truncation: { notes: wrapped.notes, original_bytes: wrapped.original_bytes, final_bytes: wrapped.final_bytes } }
     : wrapped.data;
+  let text = typeof envelope === "string" ? envelope : JSON.stringify(envelope, null, 2);
+  // Ultimate hard cap: if pretty-printing or envelope assembly somehow still overshoots,
+  // collapse to a plain marker rather than ship a payload that violates POTTER_MAX_RESPONSE_BYTES.
+  if (Buffer.byteLength(text, "utf8") > cfg.maxResponseBytes) {
+    const fallback = {
+      _truncated: true,
+      _note: "response_exceeded_cap_after_envelope_assembly",
+      original_bytes: byteSize(payload),
+    };
+    text = JSON.stringify(fallback, null, 2);
+  }
   return {
     content: [
       {
         type: "text",
-        text: typeof envelope === "string" ? envelope : JSON.stringify(envelope, null, 2),
+        text,
       },
     ],
   };

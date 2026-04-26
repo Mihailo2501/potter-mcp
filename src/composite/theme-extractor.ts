@@ -1,3 +1,7 @@
+// Tokenizer is intentionally ASCII-only: non-ASCII characters are stripped before tokenization,
+// so themes for posts written primarily in non-Latin scripts (Japanese, Cyrillic, Arabic, etc.)
+// will be empty or low-signal. v1 ships English-first; multilingual tokenization is a v1.x item.
+
 const STOPWORDS = new Set<string>([
   "the", "a", "an", "is", "are", "was", "were", "been", "be", "being", "am",
   "and", "or", "but", "nor", "so", "yet", "for", "at", "by", "in", "on", "to", "of",

@@ -161,7 +161,7 @@ class FirecrawlProvider {
     return this.wrap(tool, async () => {
       if (isLinkedInUrl(input.url)) rejectLinkedIn(tool, input.url);
       const cfg = loadConfig();
-      const url = canonicalizeWebUrl(input.url, cfg.allowPrivateUrls);
+      const url = await canonicalizeWebUrl(input.url, cfg.allowPrivateUrls);
       const options: ScrapeOptions = {};
       if (input.formats) options.formats = input.formats;
       if (input.onlyMainContent !== undefined) options.onlyMainContent = input.onlyMainContent;
@@ -194,7 +194,7 @@ class FirecrawlProvider {
     return this.wrap(tool, async () => {
       if (isLinkedInUrl(input.url)) rejectLinkedIn(tool, input.url);
       const cfg = loadConfig();
-      const url = canonicalizeWebUrl(input.url, cfg.allowPrivateUrls);
+      const url = await canonicalizeWebUrl(input.url, cfg.allowPrivateUrls);
       const opts: CrawlOptions & { pollInterval?: number; timeout?: number } = {};
       if (input.maxPages !== undefined) opts.limit = input.maxPages;
       if (input.includePatterns) opts.includePaths = input.includePatterns;
@@ -210,7 +210,7 @@ class FirecrawlProvider {
     return this.wrap(tool, async () => {
       if (isLinkedInUrl(input.url)) rejectLinkedIn(tool, input.url);
       const cfg = loadConfig();
-      const url = canonicalizeWebUrl(input.url, cfg.allowPrivateUrls);
+      const url = await canonicalizeWebUrl(input.url, cfg.allowPrivateUrls);
       const jsonFormat: FormatOption = {
         type: "json",
         ...(input.schema ? { schema: input.schema as Record<string, unknown> } : {}),

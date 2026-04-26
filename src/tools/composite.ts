@@ -558,16 +558,26 @@ const findDecisionMakerTool = defineTool({
       if (r.ok) employees = r.value;
     }
 
-    const ranked = employees
+    // Drop candidates whose score is barely above noise; a totally-unrelated role
+    // ("quantum banana") otherwise still returns the highest-scoring random employee.
+    const MIN_SCORE = 0.05;
+    const scored = employees
       .map((emp) => ({ emp, ...scoreEmployee(emp, role_description, seniority) }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, num_candidates)
+      .sort((a, b) => b.score - a.score);
+    const aboveThreshold = scored.filter((c) => c.score >= MIN_SCORE);
+    const dropped = scored.length - aboveThreshold.length;
+    const ranked = aboveThreshold
+      .slice(0, num_candidates ?? 5)
       .map(({ emp, score, match_reason }) => ({ ...emp, score, match_reason }));
 
     if (ranked.length === 0) {
-      warnings.push(
-        `no employee results; consider LinkedIn Sales Navigator search with role="${escapeSearchTerm(role_description)}"${seniority ? `, seniority=${seniority}` : ""}`,
-      );
+      const reason =
+        scored.length > 0
+          ? `${scored.length} employees scored, but none cleared the relevance threshold for role="${escapeSearchTerm(role_description)}"${seniority ? `, seniority=${seniority}` : ""}; consider LinkedIn Sales Navigator search`
+          : `no employee results; consider LinkedIn Sales Navigator search with role="${escapeSearchTerm(role_description)}"${seniority ? `, seniority=${seniority}` : ""}`;
+      warnings.push(reason);
+    } else if (dropped > 0) {
+      warnings.push(`${dropped} candidate(s) dropped below min relevance threshold of ${MIN_SCORE}`);
     }
 
     if (!resolvedLinkedInUrl) {
@@ -634,7 +644,7 @@ const extractStructuredTool = defineTool({
       });
     }
     try {
-      ensureUrlAllowed(url, loadConfig().allowPrivateUrls);
+      await ensureUrlAllowed(url, loadConfig().allowPrivateUrls);
     } catch (err) {
       throw new PotterError({
         tool: "potter_extract_structured",
