@@ -39,7 +39,7 @@
 1. Highest success count wins the category.
 2. On tie: best median latency.
 3. On further tie: lowest total cost.
-4. Raw JSON samples in `docs/provider-benchmark-runs/2026-04-24T21-15-14/` — spot-check field completeness before baking the winner into `src/providers/apify-actors.ts`.
+4. Spot-check raw field completeness before baking the winner into `src/providers/apify-actors.ts`.
 
 ## Winners (after raw sample review)
 

@@ -25,7 +25,7 @@ Common pitfall: pasting the Browserbase Project ID into the API key slot, or vic
 Inline (recommended):
 
 ```bash
-claude mcp add potter -e POTTER_APIFY_TOKEN=apify_api_xxx -e POTTER_FIRECRAWL_API_KEY=fc-xxx -e POTTER_BROWSERBASE_API_KEY=bb_live_xxx -e POTTER_BROWSERBASE_PROJECT_ID=xxx -- npx -y potter-mcp
+claude mcp add potter --scope user -e POTTER_APIFY_TOKEN=apify_api_xxx -e POTTER_FIRECRAWL_API_KEY=fc-xxx -e POTTER_BROWSERBASE_API_KEY=bb_live_xxx -e POTTER_BROWSERBASE_PROJECT_ID=xxx -- npx -y potter-mcp
 ```
 
 Or, edit `~/.claude.json` directly under `mcpServers`:

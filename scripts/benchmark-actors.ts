@@ -280,7 +280,6 @@ const renderMarkdown = (
   sections.push(`**Tested on:** ${timestamp}`);
   sections.push(`**Fixtures per category:** 5`);
   sections.push(`**Run timeout:** ${RUN_TIMEOUT_SECONDS}s each`);
-  sections.push(`**Raw outputs:** \`docs/provider-benchmark-runs/${timestamp}/\``);
   sections.push(`**Note:** Runs are sequential to avoid provider rate-limit noise.\n`);
 
   for (const category of ["profile", "company", "posts", "employees"] as Category[]) {
@@ -308,7 +307,7 @@ const renderMarkdown = (
   sections.push(`1. Highest success count wins the category.`);
   sections.push(`2. On tie: best median latency.`);
   sections.push(`3. On further tie: lowest total cost.`);
-  sections.push(`4. Raw JSON samples in \`docs/provider-benchmark-runs/${timestamp}/\` — spot-check field completeness before baking the winner into \`src/providers/apify-actors.ts\`.`);
+  sections.push(`4. Spot-check raw field completeness before baking the winner into \`src/providers/apify-actors.ts\`.`);
 
   return sections.join("\n") + "\n";
 };

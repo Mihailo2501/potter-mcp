@@ -44,7 +44,7 @@ Note: `supreme_coder/linkedin-post` was initially considered but it takes indivi
 
 ## Employees (internal, by LinkedIn company URL)
 
-Used only inside `potter_find_decision_maker` per FINAL-SPEC-LOCKED §4 (cut from the public tool list).
+Used only inside `potter_find_decision_maker`; cut from the public tool list per the v1 scope.
 
 | # | Actor ID | Runs | Rating | Reviews | Pricing |
 |---|----------|------|--------|---------|---------|

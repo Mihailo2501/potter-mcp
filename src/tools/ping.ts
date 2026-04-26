@@ -22,7 +22,7 @@ export const pingTools: ToolDefinition[] = [
       return {
         pong: true,
         server: "potter-mcp",
-        version: "1.0.1",
+        version: "1.0.2",
         timestamp: new Date().toISOString(),
         echo: message ?? null,
         providers: {
