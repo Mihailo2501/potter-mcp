@@ -1,13 +1,6 @@
 import { isIP } from "node:net";
 import { lookup } from "node:dns/promises";
 
-const DNS_NO_RECORD_CODES = new Set(["ENOTFOUND", "ENODATA", "EAI_AGAIN"]);
-
-const isDnsNoRecordError = (err: unknown): boolean => {
-  if (typeof err !== "object" || err === null) return false;
-  const code = (err as { code?: unknown }).code;
-  return typeof code === "string" && DNS_NO_RECORD_CODES.has(code);
-};
 
 const PRIVATE_IPV4_RANGES: Array<[number[], number[]]> = [
   [[10, 0, 0, 0], [10, 255, 255, 255]],
@@ -130,12 +123,10 @@ export const ensureUrlAllowed = async (input: string, allowPrivate: boolean): Pr
     try {
       resolvedAddresses = await lookup(stripped, { all: true });
     } catch (err) {
-      if (isDnsNoRecordError(err)) {
-        // Domain has no records or doesn't exist; downstream fetch will surface the same error.
-        return parsed;
-      }
-      // Any other DNS failure (network down, refused, timeout) means we cannot verify the
-      // target is safe. Fail closed rather than leak a hole when the resolver is unreliable.
+      // Fail closed on ANY DNS error. ENOTFOUND/ENODATA mean the resolver returned no
+      // records, but in a sandboxed/restricted-DNS environment this could mask a real
+      // resolution that would happen at fetch time (TOCTOU). Treating "I don't know"
+      // as "block" is the only way to keep the guard load-bearing.
       throw new Error(`Blocked: DNS resolution failed for ${hostname} (${(err as Error).message})`);
     }
     for (const { address: addr, family: af } of resolvedAddresses) {

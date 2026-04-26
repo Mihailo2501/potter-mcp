@@ -62,11 +62,22 @@ export const truncateJson = (
   data: unknown,
   maxBytes: number,
 ): TruncationResult<unknown> => {
-  const serialized = safeStringify(data);
+  // Normalize the input through safeStringify -> JSON.parse to break circular refs
+  // and convert BigInts to strings up front. The recursive size-driven traversal below
+  // assumes a tree-shaped object; without this normalization, an oversized circular
+  // payload sends the recursion into a stack overflow before reaching any fallback.
+  let normalized: unknown = data;
+  try {
+    normalized = JSON.parse(safeStringify(data));
+  } catch {
+    // safeStringify shouldn't throw, but if JSON.parse somehow does, fall back to the
+    // original input — the recursive walk below will still degrade gracefully.
+  }
+  const serialized = safeStringify(normalized);
   const originalBytes = byteLength(serialized);
   if (originalBytes <= maxBytes) {
     return {
-      data,
+      data: normalized,
       truncated: false,
       original_bytes: originalBytes,
       final_bytes: originalBytes,
@@ -74,9 +85,9 @@ export const truncateJson = (
     };
   }
 
-  if (typeof data === "string") {
+  if (typeof normalized === "string") {
     const jsonOverhead = 2;
-    const truncated = truncateString(data, Math.max(maxBytes - jsonOverhead, 0));
+    const truncated = truncateString(normalized, Math.max(maxBytes - jsonOverhead, 0));
     return {
       data: truncated,
       truncated: true,
@@ -86,20 +97,20 @@ export const truncateJson = (
     };
   }
 
-  if (Array.isArray(data)) {
-    const truncated = truncateArray(data, maxBytes);
+  if (Array.isArray(normalized)) {
+    const truncated = truncateArray(normalized, maxBytes);
     const finalBytes = sizeOf(truncated);
     return {
       data: truncated,
       truncated: true,
       original_bytes: originalBytes,
       final_bytes: finalBytes,
-      notes: [`array_truncated_from_${data.length}_to_${truncated.length}_items`],
+      notes: [`array_truncated_from_${normalized.length}_to_${truncated.length}_items`],
     };
   }
 
-  if (data !== null && typeof data === "object") {
-    const trimmed: Record<string, unknown> = { ...(data as Record<string, unknown>) };
+  if (normalized !== null && typeof normalized === "object") {
+    const trimmed: Record<string, unknown> = { ...(normalized as Record<string, unknown>) };
     const notes: string[] = [];
     let guard = 0;
     while (sizeOf(trimmed) > maxBytes && guard < 64) {
@@ -173,11 +184,11 @@ export const truncateJson = (
   }
 
   return {
-    data,
+    data: normalized,
     truncated: true,
     original_bytes: originalBytes,
     final_bytes: originalBytes,
-    notes: [`unable_to_truncate_type_${typeof data}`],
+    notes: [`unable_to_truncate_type_${typeof normalized}`],
   };
 };
 

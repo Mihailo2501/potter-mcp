@@ -1,6 +1,6 @@
 {
   "name": "potter-mcp",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Open-source GTM research MCP server for Claude Code. LinkedIn, web, and browser automation primitives plus composite research tools. BYOK, no hosted tier.",
   "license": "MIT",
   "author": "Mihailo Skendzic",
