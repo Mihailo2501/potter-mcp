@@ -3,7 +3,6 @@
 **Tested on:** 2026-04-24T21-15-14
 **Fixtures per category:** 5
 **Run timeout:** 120s each
-**Raw outputs:** `docs/provider-benchmark-runs/2026-04-24T21-15-14/`
 
 ## profile
 

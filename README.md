@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" width="120" alt="Potter logo" />
+  <img src="https://raw.githubusercontent.com/Mihailo2501/potter-mcp/main/assets/logo.png" width="120" alt="Potter logo" />
 </p>
 
 <h1 align="center">Potter</h1>
@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/potter-mcp"><img src="https://img.shields.io/npm/v/potter-mcp.svg" alt="npm" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
+  <a href="https://github.com/Mihailo2501/potter-mcp/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
   <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg" alt="Node.js" /></a>
   <a href="https://github.com/Mihailo2501/potter-mcp/actions"><img src="https://github.com/Mihailo2501/potter-mcp/actions/workflows/test.yml/badge.svg" alt="CI" /></a>
 </p>
@@ -26,7 +26,7 @@ Reasoning runs on your existing Claude subscription (Pro or Max). Bring your own
 ## Quick install
 
 ```bash
-claude mcp add potter -- npx -y potter-mcp
+claude mcp add potter --scope user -- npx -y potter-mcp
 ```
 
 Then edit `~/.claude.json` under `mcpServers` to add your provider keys:
@@ -57,7 +57,7 @@ In Claude Code:
 - "Is Linear hiring backend engineers? linear.app"
 - "Extract the pricing plans at https://www.anthropic.com/pricing as JSON"
 
-Twenty-one more in [examples/](examples/).
+21 example prompts in [examples/](https://github.com/Mihailo2501/potter-mcp/tree/main/examples).
 
 ## What's in the box (21 tools)
 
@@ -76,7 +76,7 @@ Twenty-one more in [examples/](examples/).
 
 **Utility (1):** `potter_provider_status`: verifies provider keys, optionally with live API calls.
 
-Full reference in [docs/tools.md](docs/tools.md).
+Full reference in [docs/tools.md](https://github.com/Mihailo2501/potter-mcp/blob/main/docs/tools.md).
 
 ## Provider stack
 
@@ -141,11 +141,11 @@ All Potter env vars are prefixed `POTTER_`. Full list in `.env.example`. Critica
 
 ## Troubleshooting
 
-See [docs/troubleshooting.md](docs/troubleshooting.md) for: Playwright install failures, libnss3 on Linux, Node version mismatches, stuck browser sessions, tool-selection misfires, partial-failure envelope shapes.
+See [docs/troubleshooting.md](https://github.com/Mihailo2501/potter-mcp/blob/main/docs/troubleshooting.md) for: Playwright install failures, libnss3 on Linux, Node version mismatches, stuck browser sessions, tool-selection misfires, partial-failure envelope shapes.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Maintained by one person in spare time. Bug fixes, provider-adapter PRs, docs, and example prompts all welcome. New tools or composites get a discussion first (open an issue) so we can keep the surface coherent.
+See [CONTRIBUTING.md](https://github.com/Mihailo2501/potter-mcp/blob/main/CONTRIBUTING.md). Maintained by one person in spare time. Bug fixes, provider-adapter PRs, docs, and example prompts all welcome. New tools or composites get a discussion first (open an issue) so we can keep the surface coherent.
 
 ## Security and data handling
 
@@ -157,4 +157,4 @@ Thanks to Brandon Guerrero, my Clay Bootcamp mentor, who encouraged me to build 
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](https://github.com/Mihailo2501/potter-mcp/blob/main/LICENSE).

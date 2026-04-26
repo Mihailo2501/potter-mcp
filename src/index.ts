@@ -19,7 +19,7 @@ import type { ToolDefinition } from "./tools/registry.js";
 import { webTools } from "./tools/web.js";
 
 const SERVER_NAME = "potter-mcp";
-const SERVER_VERSION = "1.0.0";
+const SERVER_VERSION = "1.0.1";
 
 interface ProviderCheck {
   provider: string;
@@ -89,6 +89,10 @@ const buildToolRegistry = (cfg: PotterConfig): ToolDefinition[] => [
 ];
 
 async function main(): Promise<void> {
+  if (process.argv.slice(2).some((a) => a === "--version" || a === "-v")) {
+    process.stdout.write(`${SERVER_VERSION}\n`);
+    process.exit(0);
+  }
   const config = loadConfig();
   const log: Logger = makeLogger(config.logLevel);
   const checks = checkProviders(config);

@@ -9,11 +9,3 @@ coverage
 .vitest
 .tsbuildinfo
 .claude/
-HANDOFF.md
-docs/launch.md
-docs/qa-runbook.md
-docs/provider-benchmark-runs/
-docs/qa-progress.jsonl
-docs/qa-progress-failures.jsonl
-docs/qa-results.md
-docs/qa-results-failures.md

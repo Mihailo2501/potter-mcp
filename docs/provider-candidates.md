@@ -12,7 +12,7 @@
 - "No cookies" (no LinkedIn session credential requirement, since Potter is stateless BYOK)
 - Active in the last 30 days (checked via `lastRunStartedAt`)
 
-Apollo / email-enrichment-specific actors excluded — those are out of Potter v1 scope per FINAL-SPEC-LOCKED §4 (no `potter_enrich_email`).
+Apollo / email-enrichment-specific actors are excluded; email enrichment is out of scope for Potter v1 (no `potter_enrich_email`).
 
 ## Profile (by LinkedIn profile URL)
 
