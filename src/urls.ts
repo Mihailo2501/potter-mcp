@@ -1,6 +1,14 @@
 import { isIP } from "node:net";
 import { lookup } from "node:dns/promises";
 
+const DNS_NO_RECORD_CODES = new Set(["ENOTFOUND", "ENODATA", "EAI_AGAIN"]);
+
+const isDnsNoRecordError = (err: unknown): boolean => {
+  if (typeof err !== "object" || err === null) return false;
+  const code = (err as { code?: unknown }).code;
+  return typeof code === "string" && DNS_NO_RECORD_CODES.has(code);
+};
+
 const PRIVATE_IPV4_RANGES: Array<[number[], number[]]> = [
   [[10, 0, 0, 0], [10, 255, 255, 255]],
   [[172, 16, 0, 0], [172, 31, 255, 255]],
@@ -115,15 +123,26 @@ export const ensureUrlAllowed = async (input: string, allowPrivate: boolean): Pr
   }
 
   // Catch DNS-rebinding-style bypasses (e.g. 127.0.0.1.sslip.io, attacker.example.com → 10.x.x.x)
-  // by resolving the hostname and checking the IP family. Only runs for non-literal hosts.
+  // by resolving the hostname and checking ALL returned IP addresses against private ranges.
+  // Only runs for non-literal hosts.
   if (family === 0) {
+    let resolvedAddresses: Array<{ address: string; family: number }>;
     try {
-      const resolved = await lookup(stripped);
-      const addr = resolved.address;
-      if (resolved.family === 4 && isPrivateIPv4(addr)) {
+      resolvedAddresses = await lookup(stripped, { all: true });
+    } catch (err) {
+      if (isDnsNoRecordError(err)) {
+        // Domain has no records or doesn't exist; downstream fetch will surface the same error.
+        return parsed;
+      }
+      // Any other DNS failure (network down, refused, timeout) means we cannot verify the
+      // target is safe. Fail closed rather than leak a hole when the resolver is unreliable.
+      throw new Error(`Blocked: DNS resolution failed for ${hostname} (${(err as Error).message})`);
+    }
+    for (const { address: addr, family: af } of resolvedAddresses) {
+      if (af === 4 && isPrivateIPv4(addr)) {
         throw new Error(`Blocked: ${hostname} resolves to private IPv4 ${addr}`);
       }
-      if (resolved.family === 6) {
+      if (af === 6) {
         const mapped6 = unwrapIPv4FromIPv6(addr);
         if (mapped6 && isIP(mapped6) === 4 && isPrivateIPv4(mapped6)) {
           throw new Error(`Blocked: ${hostname} resolves to IPv4-mapped IPv6 ${addr}`);
@@ -135,10 +154,6 @@ export const ensureUrlAllowed = async (input: string, allowPrivate: boolean): Pr
       if (METADATA_HOSTS.has(addr)) {
         throw new Error(`Blocked: ${hostname} resolves to metadata host ${addr}`);
       }
-    } catch (err) {
-      if (err instanceof Error && err.message.startsWith("Blocked:")) throw err;
-      // DNS lookup failures (NXDOMAIN, network unreachable, etc.) pass through;
-      // the downstream fetch will surface a clearer provider-side error.
     }
   }
 
@@ -152,21 +167,15 @@ const LINKEDIN_ACCEPTED_HOSTS = new Set([
   "touch.linkedin.com",
 ]);
 
-// LinkedIn serves regional content under <country-code>.linkedin.com. Closed allowlist
-// of subdomains LinkedIn actually serves; arbitrary subdomains like foo.linkedin.com stay rejected.
-const LINKEDIN_REGIONAL_SUBDOMAINS = new Set([
-  "uk", "de", "fr", "es", "it", "nl", "br", "mx", "ca", "au",
-  "in", "jp", "kr", "pl", "pt", "se", "dk", "no", "fi", "be",
-  "ch", "at", "ie", "za", "sg", "hk", "tw", "ru", "ar", "cl",
-  "co", "pe", "tr", "ae", "sa", "il", "id", "th", "ph", "vn",
-]);
-
-const REGIONAL_LINKEDIN_HOST_RE = /^([a-z]{2,3})\.linkedin\.com$/;
+// LinkedIn serves regional content under <country-code>.linkedin.com. Accept any 2-letter
+// ASCII subdomain prefix (covers all ISO 3166-1 alpha-2 codes LinkedIn actively serves).
+// Three-or-more-letter prefixes like foo.linkedin.com stay rejected because they're not
+// ISO country codes and don't correspond to LinkedIn-served properties.
+const REGIONAL_LINKEDIN_HOST_RE = /^[a-z]{2}\.linkedin\.com$/;
 
 const isAcceptedLinkedInHost = (host: string): boolean => {
   if (LINKEDIN_ACCEPTED_HOSTS.has(host)) return true;
-  const m = host.match(REGIONAL_LINKEDIN_HOST_RE);
-  return Boolean(m && m[1] && LINKEDIN_REGIONAL_SUBDOMAINS.has(m[1]));
+  return REGIONAL_LINKEDIN_HOST_RE.test(host);
 };
 
 export const isLinkedInUrl = (input: string): boolean => {

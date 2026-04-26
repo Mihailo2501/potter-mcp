@@ -4,17 +4,21 @@ const byteLength = (s: string): number => Buffer.byteLength(s, "utf8");
 
 // JSON.stringify throws on circular refs and on BigInt values, which would convert
 // a successful tool result into a runtime error. safeStringify swaps both for inert markers
-// so truncation logic always sees a serializable string.
-const safeStringify = (data: unknown): string => {
+// so the serialization path always produces a string.
+export const safeStringify = (data: unknown, indent?: number | string): string => {
   const seen = new WeakSet<object>();
-  const out = JSON.stringify(data, (_key, value) => {
-    if (typeof value === "bigint") return value.toString();
-    if (typeof value === "object" && value !== null) {
-      if (seen.has(value)) return "[Circular]";
-      seen.add(value);
-    }
-    return value;
-  });
+  const out = JSON.stringify(
+    data,
+    (_key, value) => {
+      if (typeof value === "bigint") return value.toString();
+      if (typeof value === "object" && value !== null) {
+        if (seen.has(value)) return "[Circular]";
+        seen.add(value);
+      }
+      return value;
+    },
+    indent,
+  );
   return out ?? "null";
 };
 

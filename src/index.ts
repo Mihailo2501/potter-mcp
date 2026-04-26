@@ -19,7 +19,7 @@ import type { ToolDefinition } from "./tools/registry.js";
 import { webTools } from "./tools/web.js";
 
 const SERVER_NAME = "potter-mcp";
-const SERVER_VERSION = "1.0.3";
+const SERVER_VERSION = "1.0.4";
 
 interface ProviderCheck {
   provider: string;

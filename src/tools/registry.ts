@@ -2,7 +2,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { ZodType } from "zod";
 import { z } from "zod";
 import { PotterError, errorToContent } from "../errors.js";
-import { byteSize, truncateJson } from "../truncation.js";
+import { byteSize, safeStringify, truncateJson } from "../truncation.js";
 import { loadConfig } from "../config.js";
 
 // _truncation envelope wrapper costs ~150-200 bytes; reserve headroom so adding it
@@ -47,16 +47,21 @@ export const toolSuccess = (payload: unknown): CallToolResult => {
   const envelope = wrapped.truncated
     ? { ...((wrapped.data ?? {}) as object), _truncation: { notes: wrapped.notes, original_bytes: wrapped.original_bytes, final_bytes: wrapped.final_bytes } }
     : wrapped.data;
-  let text = typeof envelope === "string" ? envelope : JSON.stringify(envelope, null, 2);
-  // Ultimate hard cap: if pretty-printing or envelope assembly somehow still overshoots,
-  // collapse to a plain marker rather than ship a payload that violates POTTER_MAX_RESPONSE_BYTES.
+  // safeStringify (not raw JSON.stringify) so a circular ref or BigInt in the wrapped
+  // envelope can never convert a successful tool result into a runtime serialization error.
+  let text = typeof envelope === "string" ? envelope : safeStringify(envelope, 2);
   if (Buffer.byteLength(text, "utf8") > cfg.maxResponseBytes) {
     const fallback = {
       _truncated: true,
       _note: "response_exceeded_cap_after_envelope_assembly",
       original_bytes: byteSize(payload),
     };
-    text = JSON.stringify(fallback, null, 2);
+    text = safeStringify(fallback, 2);
+  }
+  // Ultimate hard cap: if even the fallback marker overshoots a pathologically small
+  // configured cap, byte-slice the text. May produce invalid JSON but respects the cap.
+  if (Buffer.byteLength(text, "utf8") > cfg.maxResponseBytes) {
+    text = Buffer.from(text, "utf8").subarray(0, cfg.maxResponseBytes).toString("utf8");
   }
   return {
     content: [
